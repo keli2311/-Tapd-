@@ -1,11 +1,13 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
 // @version      2.0.3
-// @description  展开用例列表后，通过“最终结果”下拉框将非通过用例逐条设为通过（适用于所有测试计划详情页）。
+// @description  展开用例列表后，通过“最终结果”下拉框将非通过用例逐条设为通过
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @run-at       document-idle
 // @grant        none
+// @downloadURL  https://raw.githubusercontent.com/keli2311/-Tapd-/main/tapd_pending_to_pass.user.js
+// @updateURL    https://raw.githubusercontent.com/keli2311/-Tapd-/main/tapd_pending_to_pass.user.js
 // ==/UserScript==
 
 (() => {
