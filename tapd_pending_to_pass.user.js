@@ -3,7 +3,7 @@
 // @namespace    local.tapd.automation
 // @version      2.0.3
 // @description  展开用例列表后，通过“最终结果”下拉框将非通过用例逐条设为通过
-// @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
+// @match        https://tapd.*.com/*/sparrow/test_plan/detail/*
 // @run-at       document-idle
 // @grant        none
 // @downloadURL  https://raw.githubusercontent.com/keli2311/-Tapd-/main/tapd_pending_to_pass.user.js
