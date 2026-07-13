@@ -1,4 +1,4 @@
-# TAPD 用例批量改为通过
+﻿# TAPD 非通过用例批量改为通过
 
 脚本：[tapd_pending_to_pass.user.js](./tapd_pending_to_pass.user.js)。适用于所有 TAPD 测试计划详情页：
 
