@@ -8,7 +8,7 @@
  
  ## 使用方式
  
- 1. 在 Chrome 中安装 Tampermonkey 扩展，新建脚本。
+ 1. 在 Chrome 中安装 Tampermonkey 扩展，新建脚本。（请确保在扩展设置中打开该扩展的-允许用户脚本）
  2. 粘贴 tapd_pending_to_pass.user.js 的全部内容并保存。
  3. 打开任意 TAPD 测试计划详情页（/sparrow/test_plan/detail/*）；右下角会显示待处理数量。
  4. 点击"将非通过结果改为通过"，并在浏览器确认框中确认写入。
