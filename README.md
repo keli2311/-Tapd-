@@ -20,3 +20,22 @@
  - 逐条执行：每条先点击状态单元格，等待选项框出现，选中"通过"，再用 item_id 重新查询 DOM 确认状态变更后才继续下一条。
  - 兼容性：@match 覆盖所有 */sparrow/test_plan/detail/* 路径，不限定具体项目 ID 或迭代。
  - 超时处理：每条等待最多 3 秒，超时的用例在最终提示中列出。
+## 自动更新
+
+脚本头部包含 @downloadURL 和 @updateURL，指向 GitHub 仓库：
+
+- https://raw.githubusercontent.com/keli2311/-Tapd-/main/tapd_pending_to_pass.user.js
+
+安装了 Tampermonkey 后，脚本会定期自动检查更新并提示升级。
+
+## 更新日志
+
+| 版本 | 变更 |
+|------|------|
+| 2.0.8 | 恢复 @match tapd.woa.com/*/sparrow/test_plan/view/* |
+| 2.0.7 | 移除 @match tapd.woa.com/*/sparrow/test_plan/view/*，仅保留 	encent.com/detail/* |
+| 2.0.6 | 新增 @downloadURL / @updateURL，支持 Tampermonkey 自动更新 |
+| 2.0.4 | 新增 @match https://tapd.woa.com/*/sparrow/test_plan/view/* |
+| 2.0.3 | 状态判断改用 PASS_STATUS_VALUES 数组；新增 isPassSpan / isRowPassed；waitForPass 改用 itemId 查询；@match 改为通用路径 |
+| 2.0.0 | 重写为点击"最终结果"单元格 → 选项框选择"通过"的方式 |
+| 1.0.0 | 初始版本，通过快速执行按钮操作 |
