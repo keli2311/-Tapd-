@@ -8,7 +8,7 @@
  
  ## 使用方式
  
- 1. 在 Chrome 中安装 Tampermonkey 扩展，新建脚本。（请确保在扩展设置中打开该扩展的-允许用户脚本）
+ 1. 在 Chrome 中安装 Tampermonkey 扩展，新建脚本。
  2. 粘贴 tapd_pending_to_pass.user.js 的全部内容并保存。
  3. 打开任意 TAPD 测试计划详情页（/sparrow/test_plan/detail/*）；右下角会显示待处理数量。
  4. 点击"将非通过结果改为通过"，并在浏览器确认框中确认写入。
@@ -32,8 +32,8 @@
 
 | 版本 | 变更 |
 |------|------|
-| 2.0.8 | 恢复 @match tapd.woa.com/*/sparrow/test_plan/view/* |
-| 2.0.7 | 移除 @match tapd.woa.com/*/sparrow/test_plan/view/*，仅保留 	encent.com/detail/* |
+| 2.0.8 | 恢复 @match tapd.woa.com/view/* |
+| 2.0.9 | 按钮改为"开始执行用例"，执行中变红色可点击停止，再次点击重新开始 || 2.0.7 | 移除 @match tapd.woa.com/*/sparrow/test_plan/view/*，仅保留 	encent.com/detail/* |
 | 2.0.6 | 新增 @downloadURL / @updateURL，支持 Tampermonkey 自动更新 |
 | 2.0.4 | 新增 @match https://tapd.woa.com/*/sparrow/test_plan/view/* |
 | 2.0.3 | 状态判断改用 PASS_STATUS_VALUES 数组；新增 isPassSpan / isRowPassed；waitForPass 改用 itemId 查询；@match 改为通用路径 |
