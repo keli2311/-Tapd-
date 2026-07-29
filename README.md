@@ -32,8 +32,9 @@
 
 | 版本 | 变更 |
 |------|------|
+| 2.0.9 | 按钮改为"开始执行用例"，执行中变红色可点击停止，再次点击重新开始 |
 | 2.0.8 | 恢复 @match tapd.woa.com/view/* |
-| 2.0.9 | 按钮改为"开始执行用例"，执行中变红色可点击停止，再次点击重新开始 || 2.0.7 | 移除 @match tapd.woa.com/*/sparrow/test_plan/view/*，仅保留 	encent.com/detail/* |
+| 2.0.7 | 移除 @match tapd.woa.com/*/sparrow/test_plan/view/*，仅保留 tencent.com/detail/* |
 | 2.0.6 | 新增 @downloadURL / @updateURL，支持 Tampermonkey 自动更新 |
 | 2.0.4 | 新增 @match https://tapd.woa.com/*/sparrow/test_plan/view/* |
 | 2.0.3 | 状态判断改用 PASS_STATUS_VALUES 数组；新增 isPassSpan / isRowPassed；waitForPass 改用 itemId 查询；@match 改为通用路径 |
