@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.0.8
+// @version      2.0.9
 // @description  展开用例列表后，通过“最终结果”下拉框将非通过用例逐条设为通过（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
@@ -109,20 +109,28 @@
     return await waitForPass(itemId);
   }
 
-  async function run() {
+  let stopRequested = false;
+
+  async function execute() {
     const rows = targetRows();
     if (rows.length === 0) {
       setMessage('没有检测到非通过用例。');
       return;
     }
-    if (!window.confirm(`将 ${rows.length} 条非通过用例的“最终结果”改为“通过”。该操作会写入 TAPD，是否继续？`)) return;
 
-    button.disabled = true;
+    stopRequested = false;
+    button.textContent = '执行中';
+    button.style.background = '#d32f2f';
     await expandTargetLists(rows);
     let succeeded = 0;
     const failed = [];
 
     for (let index = 0; index < rows.length; index += 1) {
+      if (stopRequested) {
+        setMessage(`已停止：已完成 ${index}/${rows.length} 条（成功 ${succeeded} 条）。`);
+        resetButton();
+        return;
+      }
       const row = rows[index];
       const title = row.querySelector('td[field="name"]')?.textContent?.trim() || row.getAttribute('item_id');
       setMessage(`正在处理 ${index + 1}/${rows.length}：${title}`);
@@ -131,16 +139,34 @@
       await sleep(BETWEEN_CASES_MS);
     }
 
-    button.disabled = false;
+    resetButton();
     setMessage(`完成：成功 ${succeeded} 条，失败 ${failed.length} 条。${failed.length ? `失败项：${failed.join('；')}` : ''}`);
+  }
+
+  function resetButton() {
+    button.textContent = '开始执行用例';
+    button.style.background = '#00a870';
+    button.removeAttribute('disabled');
+  }
+
+  let isRunning = false;
+  function handleClick() {
+    if (isRunning) {
+      stopRequested = true;
+    } else {
+      isRunning = true;
+      execute().finally(() => {
+        isRunning = false;
+      });
+    }
   }
 
   const panel = document.createElement('div');
   panel.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:2147483647;padding:12px;width:280px;background:#fff;border:1px solid #d9d9d9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;';
   const button = document.createElement('button');
-  button.textContent = '将非通过结果改为通过';
+  button.textContent = '开始执行用例';
   button.style.cssText = 'width:100%;padding:8px;background:#00a870;color:#fff;border:0;border-radius:4px;cursor:pointer;';
-  button.addEventListener('click', run);
+  button.addEventListener('click', handleClick);
   const message = document.createElement('div');
   message.style.cssText = 'margin-top:8px;color:#666;word-break:break-word;';
   const setMessage = (text) => { message.textContent = text; };
