@@ -32,6 +32,7 @@
 
 | 版本 | 变更 |
 |------|------|
+| 2.0.10 | 执行中的按钮文本改为"暂停" |
 | 2.0.9 | 按钮改为"开始执行用例"，执行中变红色可点击停止，再次点击重新开始 |
 | 2.0.8 | 恢复 @match tapd.woa.com/view/* |
 | 2.0.7 | 移除 @match tapd.woa.com/*/sparrow/test_plan/view/*，仅保留 tencent.com/detail/* |
