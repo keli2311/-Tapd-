@@ -1,4 +1,4 @@
-﻿ # TAPD 非通过用例批量改为通过
+﻿﻿ # TAPD 非通过用例批量改为通过
  
  脚本：[tapd_pending_to_pass.user.js](./tapd_pending_to_pass.user.js)。适用于所有 TAPD 测试计划详情页：
  
@@ -11,17 +11,17 @@
  1. 在 Chrome 中安装 Tampermonkey 扩展，新建脚本。
  2. 粘贴 tapd_pending_to_pass.user.js 的全部内容并保存。
  3. 打开任意 TAPD 测试计划详情页（/sparrow/test_plan/detail/*）；右下角会显示待处理数量。
- 4. 点击"将非通过结果改为通过"，并在浏览器确认框中确认写入。
+ 4. 点击"开始执行用例"，并在浏览器确认框中确认写入。
  
  ## 技术要点
  
  - 识别非通过用例的依据：span[rel] 的 rel 属性值（status_pass / pass 视为通过，其余为非通过）。
  - 展开折叠列表：自动找到用例行所属的分类目录行，依次展开后再执行修改。
  - 逐条执行：每条先点击状态单元格，等待选项框出现，选中"通过"，再用 item_id 重新查询 DOM 确认状态变更后才继续下一条。
- - 兼容性：@match 覆盖所有 */sparrow/test_plan/detail/* 路径，不限定具体项目 ID 或迭代。
+ - 兼容性：@match 覆盖 https://tapd.tencent.com/*/sparrow/test_plan/detail/*、https://tapd.woa.com/*/sparrow/test_plan/view/* 与 http://localhost:8080/*，不限定具体项目 ID 或迭代。
  - 超时处理：每条等待最多 3 秒，超时的用例在最终提示中列出。
-- 保持活跃：执行期间播放人耳几乎听不到的循环音（阻止浏览器高强度节流）并请求屏幕唤醒锁（阻止系统休眠）；暂停或完成后自动释放。
-- 失败重试：有失败用例时 10 秒后自动重试（可点击取消）；连续 3 次仍失败则自动刷新页面并继续，刷新后仍失败则停止。状态通过 sessionStorage 跨刷新保留。
+ - 保持活跃：执行期间播放人耳几乎听不到的循环音（阻止浏览器高强度节流）并请求屏幕唤醒锁（阻止系统休眠）；暂停或完成后自动释放。
+ - 失败重试：有失败用例时 10 秒后自动重试（可点击取消）；连续 3 次仍失败则自动刷新页面并继续，刷新后仍失败则停止。状态通过 sessionStorage 跨刷新保留。
 ## 自动更新
 
 脚本头部包含 @downloadURL 和 @updateURL，指向 GitHub 仓库：
