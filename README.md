@@ -45,18 +45,3 @@
 | 2.0.3 | 状态判断改用 PASS_STATUS_VALUES 数组；新增 isPassSpan / isRowPassed；waitForPass 改用 itemId 查询；@match 改为通用路径 |
 | 2.0.0 | 重写为点击"最终结果"单元格 → 选项框选择"通过"的方式 |
 | 1.0.0 | 初始版本，通过快速执行按钮操作 |
-## 本地模拟测试站
-
-[mock-tapd.html](./mock-tapd.html) 复刻 TAPD 测试计划详情页的 DOM 结构（分类折叠、`tr.tcase_row`、`.td_status .quick_execute span[rel]`、状态选项框），并支持生成用例、顽固失败与模拟失败模式。安装脚本后打开该页面即可测试开始执行、暂停、失败自动重试与刷新恢复逻辑。
-
-## 本地安装站
-
-目录中的 [index.html](./index.html) 是一个油猴脚本安装站，点击页面上的“安装或更新油猴脚本”即可把脚本装进 Tampermonkey；脚本本体仍是独立的 [tapd_pending_to_pass.user.js](./tapd_pending_to_pass.user.js)，不内嵌在网页中。
-
-启动方式：在 PowerShell 中运行
-
-```powershell
-.\start_server.ps1
-```
-
-然后浏览器访问 http://localhost:8080/。请使用该地址而非直接双击 index.html，否则 Tampermonkey 可能无法拦截脚本安装请求。
