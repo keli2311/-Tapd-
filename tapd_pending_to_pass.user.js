@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.0.10
+// @version      2.0.11
 // @description  展开用例列表后，通过“最终结果”下拉框将非通过用例逐条设为通过（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
@@ -110,6 +110,64 @@
   }
 
   let stopRequested = false;
+  let keepAlive = null;
+  let wakeLock = null;
+
+  // 播放一段人耳几乎听不到的循环音，让 Chrome 不把当前标签页当作
+  // “静默后台标签页”而做高强度定时器节流，避免执行看起来像卡住。
+  function startKeepAlive() {
+    if (keepAlive) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = Math.sin((i * 2 * Math.PI * 440) / ctx.sampleRate) * 0.001;
+      }
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(ctx.destination);
+      source.start();
+      keepAlive = { ctx, source };
+    } catch (error) {
+      keepAlive = null;
+    }
+  }
+
+  function stopKeepAlive() {
+    if (!keepAlive) return;
+    try {
+      keepAlive.source.stop();
+      keepAlive.ctx.close();
+    } catch (error) {
+      // 忽略关闭时的异常
+    }
+    keepAlive = null;
+  }
+
+  // 屏幕唤醒锁：阻止电脑进入休眠。需要用户手势触发，且页面隐藏时
+  // 浏览器会自动释放，因此与 keepAlive 配合使用。
+  async function requestWakeLock() {
+    try {
+      if ('wakeLock' in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+    } catch (error) {
+      wakeLock = null;
+    }
+  }
+
+  function releaseWakeLock() {
+    if (!wakeLock) return;
+    try {
+      wakeLock.release();
+    } catch (error) {
+      // 忽略释放时的异常
+    }
+    wakeLock = null;
+  }
 
   async function execute() {
     const rows = targetRows();
@@ -121,6 +179,8 @@
     stopRequested = false;
     button.textContent = '暂停';
     button.style.background = '#d32f2f';
+    startKeepAlive();
+    requestWakeLock();
     await expandTargetLists(rows);
     let succeeded = 0;
     const failed = [];
@@ -147,6 +207,8 @@
     button.textContent = '开始执行用例';
     button.style.background = '#00a870';
     button.removeAttribute('disabled');
+    stopKeepAlive();
+    releaseWakeLock();
   }
 
   let isRunning = false;
@@ -160,6 +222,11 @@
       });
     }
   }
+
+  // 页面重新回到前台时，若仍在执行则重新请求唤醒锁。
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && isRunning && !wakeLock) requestWakeLock();
+  });
 
   const panel = document.createElement('div');
   panel.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:2147483647;padding:12px;width:280px;background:#fff;border:1px solid #d9d9d9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;';
