@@ -1,8 +1,8 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.0.12
-// @description  展开用例列表后，通过“最终结果”下拉框将非通过用例逐条设为通过（适用于所有测试计划详情页）。
+// @version      2.2.3
+// @description  支持逐条执行和每批十条通过的测试计划用例（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
 // @match        http://localhost:8080/*
@@ -21,6 +21,7 @@
   const BETWEEN_CASES_MS = 350;
   const MAX_ATTEMPTS = 3;
   const RETRY_DELAY_MS = 10000;
+  const BATCH_SIZE = 10;
   const RETRY_STATE_KEY = 'tapdExecRetryState';
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -88,6 +89,149 @@
     });
   }
 
+  function rowCheckbox(row) {
+    return row?.querySelector('input[type="checkbox"]');
+  }
+
+  function rowById(itemId) {
+    return document.querySelector(`tr.tcase_row[item_id="${CSS.escape(itemId)}"]`);
+  }
+
+  async function selectRows(rows) {
+    const itemIds = rows.map((row) => row.getAttribute('item_id')).filter(Boolean);
+    for (const itemId of itemIds) {
+      const checkbox = rowCheckbox(rowById(itemId));
+      if (!checkbox) return false;
+      if (!checkbox.checked) {
+        checkbox.click();
+      }
+    }
+    // TAPD 会在选中状态变化后异步重绘行操作入口，统一等待一次即可。
+    await sleep(MENU_WAIT_MS);
+    return itemIds.every((itemId) => rowCheckbox(rowById(itemId))?.checked === true);
+  }
+
+  function clearRowSelection(rows) {
+    for (const row of rows) {
+      const checkbox = rowCheckbox(rowById(row.getAttribute('item_id')));
+      if (checkbox?.checked) checkbox.click();
+    }
+  }
+
+  function batchFailure(message) {
+    setMessage(`批量执行失败：${message}`);
+    console.warn(`[TAPD batch execution] ${message}`);
+    return false;
+  }
+
+  async function waitForRowsPassed(itemIds, timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (itemIds.every((itemId) => isRowPassed(itemId))) return true;
+      await sleep(200);
+    }
+    return false;
+  }
+
+  // 读取 TAPD 批量执行所需的接口基址与计划 ID（TFL 配置优先，其次页面内联脚本，最后从 URL 推导）
+  function getBatchConfig() {
+    try {
+      const cfg = window.TFL?.TestPlanDetail?.Tcase?.config;
+      if (cfg?.tcase_instance_base_url && cfg?.plan_id) {
+        return { base: cfg.tcase_instance_base_url, planId: cfg.plan_id };
+      }
+    } catch (error) {
+      // 忽略，继续降级探测
+    }
+    try {
+      for (const script of document.querySelectorAll('script')) {
+        const text = script.textContent || '';
+        const baseMatch = text.match(/tcase_instance_base_url\s*:\s*"([^"]+)"/);
+        const planMatch = text.match(/plan_id\s*:\s*"(\d+)"/);
+        if (baseMatch && planMatch) return { base: baseMatch[1], planId: planMatch[1] };
+      }
+    } catch (error) {
+      // 忽略，继续降级探测
+    }
+    const urlMatch = location.pathname.match(/^\/?(\d+)\/sparrow\/test_plan\/detail\/(\d+)/);
+    if (urlMatch) return { base: `/${urlMatch[1]}/sparrow/tcase_instance/`, planId: urlMatch[2] };
+    return null;
+  }
+
+  // 直接调用 TAPD 自己的批量执行方法（等价于点击“批量执行用例 → 通过”），绕开菜单渲染/点击链路。
+  // 返回 Promise<boolean>，true 表示已成功发起；最终以 waitForRowsPassed 的 DOM 变化为准。
+  function invokeBatchQuickExecute(itemIds) {
+    return new Promise((resolve) => {
+      try {
+        const Tcase = window.TFL?.TestPlanDetail?.Tcase;
+        const dollar = window.$ || window.jQuery;
+        if (Tcase && typeof Tcase.batch_quick_execute === 'function' && dollar) {
+          // 事件处理器签名：batch_quick_execute(row, itemId, $element)，从 $element 读取 data-result-status
+          const lastRow = rowById(itemIds[itemIds.length - 1]);
+          const fake = document.createElement('a');
+          fake.setAttribute('data-result-status', 'pass');
+          Tcase.batch_quick_execute(dollar(lastRow || document), itemIds[itemIds.length - 1], dollar(fake));
+          resolve(true);
+          return;
+        }
+
+        // 降级：TFL 方法不可用时，直接 POST TAPD 批量执行接口。
+        const cfg = getBatchConfig();
+        if (!cfg) {
+          console.warn('[TAPD batch execution] 未找到批量执行接口配置');
+          resolve(false);
+          return;
+        }
+        const url = cfg.base + 'execute_result/batch_execute/0/';
+        const params = new URLSearchParams();
+        params.append('data[Result][tcase_id]', itemIds.join(','));
+        params.append('data[Result][test_plan_id]', cfg.planId);
+        params.append('data[Result][result_status]', 'pass');
+        const done = (ok) => resolve(ok);
+        if (dollar) {
+          dollar.ajax({
+            type: 'post',
+            url,
+            data: params.toString(),
+            success: (response) => done(String(response).trim() === 'true'),
+            error: () => done(false),
+          });
+        } else {
+          fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: params.toString(),
+            credentials: 'same-origin',
+          })
+            .then((response) => response.text())
+            .then((text) => done(String(text).trim() === 'true'))
+            .catch(() => done(false));
+        }
+      } catch (error) {
+        console.warn('[TAPD batch execution] 调用失败', error);
+        resolve(false);
+      }
+    });
+  }
+
+  async function executeBatchRows(rows) {
+    const itemIds = rows.map((row) => row.getAttribute('item_id')).filter(Boolean);
+    if (itemIds.length !== rows.length) return false;
+
+    if (!(await selectRows(rows))) return batchFailure('10 条用例未全部保持勾选');
+
+    // 直连 TAPD 批量执行，不再操作行菜单。
+    if (!(await invokeBatchQuickExecute(itemIds))) return false;
+
+    // TAPD 成功后会用 reload_tcase_row 重绘这些行，勾选状态随之清除；等 DOM 变为“通过”。
+    const passed = await waitForRowsPassed(itemIds, 12000);
+    if (!passed) {
+      // 接口已发起但 DOM 未变化时，取消勾选避免残留。
+      clearRowSelection(rows);
+    }
+    return passed;
+  }
+
   function categoryChain(row) {
     const categories = [];
     let current = row;
@@ -145,6 +289,49 @@
 
     option.click();
     return await waitForPass(itemId);
+  }
+
+  async function executeBatch() {
+    const initialRows = targetRows();
+    if (initialRows.length === 0) {
+      setMessage('没有检测到非通过用例。');
+      resetButton();
+      return;
+    }
+
+    stopRequested = false;
+    button.disabled = true;
+    batchButton.textContent = '暂停执行';
+    batchButton.style.background = '#d32f2f';
+    startKeepAlive();
+    requestWakeLock();
+
+    let succeeded = 0;
+    const failed = [];
+    while (!stopRequested) {
+      const rows = targetRows().slice(0, BATCH_SIZE);
+      if (rows.length === 0) break;
+
+      const titles = rows.map((row) => row.querySelector('td[field="name"]')?.textContent?.trim() || row.getAttribute('item_id'));
+      setMessage(`正在批量处理 ${titles.length} 条：${titles[0]}${titles.length > 1 ? ` 等 ${titles.length} 条` : ''}`);
+      if (await executeBatchRows(rows)) {
+        succeeded += rows.length;
+      } else {
+        failed.push(...titles);
+        break;
+      }
+      await sleep(BETWEEN_CASES_MS);
+    }
+
+    stopKeepAlive();
+    releaseWakeLock();
+    if (stopRequested) {
+      resetButton();
+      setMessage(`已停止：成功 ${succeeded} 条，失败 ${failed.length} 条。`);
+      return;
+    }
+    resetButton();
+    setMessage(`批量执行完成：成功 ${succeeded} 条，失败 ${failed.length} 条。`);
   }
 
   let stopRequested = false;
@@ -218,7 +405,7 @@
 
     const retryState = loadRetryState();
     stopRequested = false;
-    button.textContent = '暂停';
+    button.textContent = '暂停执行';
     button.style.background = '#d32f2f';
     startKeepAlive();
     requestWakeLock();
@@ -305,9 +492,11 @@
   }
 
   function resetButton() {
-    button.textContent = '开始执行用例';
+    button.textContent = '逐条执行用例';
     button.style.background = '#00a870';
     button.removeAttribute('disabled');
+    batchButton.textContent = '批量执行用例';
+    batchButton.style.background = '#1677ff';
     stopKeepAlive();
     releaseWakeLock();
   }
@@ -336,16 +525,30 @@
   });
 
   const panel = document.createElement('div');
+  panel.id = 'tapd-exec-panel';
   panel.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:2147483647;padding:12px;width:280px;background:#fff;border:1px solid #d9d9d9;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;';
   const button = document.createElement('button');
-  button.textContent = '开始执行用例';
+  button.textContent = '逐条执行用例';
   button.style.cssText = 'width:100%;padding:8px;background:#00a870;color:#fff;border:0;border-radius:4px;cursor:pointer;';
   button.addEventListener('click', handleClick);
+  const batchButton = document.createElement('button');
+  batchButton.textContent = '批量执行用例';
+  batchButton.style.cssText = 'width:100%;margin-top:6px;padding:8px;background:#1677ff;color:#fff;border:0;border-radius:4px;cursor:pointer;';
+  batchButton.addEventListener('click', () => {
+    if (autoResumeRunning || isRunning) {
+      stopRequested = true;
+      return;
+    }
+    isRunning = true;
+    executeBatch().finally(() => {
+      isRunning = false;
+    });
+  });
   const message = document.createElement('div');
   message.style.cssText = 'margin-top:8px;color:#666;word-break:break-word;';
   const setMessage = (text) => { message.textContent = text; };
   setMessage(`已检测到 ${targetRows().length} 条非通过用例。`);
-  panel.append(button, message);
+  panel.append(button, batchButton, message);
   document.body.appendChild(panel);
 
   // 刷新页面后自动恢复执行：等待用例列表出现，然后直接开始。
