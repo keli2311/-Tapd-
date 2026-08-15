@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.2.3
+// @version      2.3.0
 // @description  支持逐条执行和每批十条通过的测试计划用例（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
@@ -88,33 +88,8 @@
     });
   }
 
-  function rowCheckbox(row) {
-    return row?.querySelector('input[type="checkbox"]');
-  }
-
   function rowById(itemId) {
     return document.querySelector(`tr.tcase_row[item_id="${CSS.escape(itemId)}"]`);
-  }
-
-  async function selectRows(rows) {
-    const itemIds = rows.map((row) => row.getAttribute('item_id')).filter(Boolean);
-    for (const itemId of itemIds) {
-      const checkbox = rowCheckbox(rowById(itemId));
-      if (!checkbox) return false;
-      if (!checkbox.checked) {
-        checkbox.click();
-      }
-    }
-    // TAPD 会在选中状态变化后异步重绘行操作入口，统一等待一次即可。
-    await sleep(MENU_WAIT_MS);
-    return itemIds.every((itemId) => rowCheckbox(rowById(itemId))?.checked === true);
-  }
-
-  function clearRowSelection(rows) {
-    for (const row of rows) {
-      const checkbox = rowCheckbox(rowById(row.getAttribute('item_id')));
-      if (checkbox?.checked) checkbox.click();
-    }
   }
 
   function batchFailure(message) {
@@ -157,24 +132,12 @@
     return null;
   }
 
-  // 直接调用 TAPD 自己的批量执行方法（等价于点击“批量执行用例 → 通过”），绕开菜单渲染/点击链路。
-  // 返回 Promise<boolean>，true 表示已成功发起；最终以 waitForRowsPassed 的 DOM 变化为准。
-  function invokeBatchQuickExecute(itemIds) {
+  // 直接调用 TAPD 批量执行接口（等价于“批量执行用例 → 通过”），不依赖勾选状态或菜单。
+  // 返回 Promise<boolean>，true 表示接口确认执行成功。
+  function batchExecuteByApi(itemIds) {
     return new Promise((resolve) => {
       try {
-        const Tcase = window.TFL?.TestPlanDetail?.Tcase;
         const dollar = window.$ || window.jQuery;
-        if (Tcase && typeof Tcase.batch_quick_execute === 'function' && dollar) {
-          // 事件处理器签名：batch_quick_execute(row, itemId, $element)，从 $element 读取 data-result-status
-          const lastRow = rowById(itemIds[itemIds.length - 1]);
-          const fake = document.createElement('a');
-          fake.setAttribute('data-result-status', 'pass');
-          Tcase.batch_quick_execute(dollar(lastRow || document), itemIds[itemIds.length - 1], dollar(fake));
-          resolve(true);
-          return;
-        }
-
-        // 降级：TFL 方法不可用时，直接 POST TAPD 批量执行接口。
         const cfg = getBatchConfig();
         if (!cfg) {
           console.warn('[TAPD batch execution] 未找到批量执行接口配置');
@@ -217,17 +180,22 @@
     const itemIds = rows.map((row) => row.getAttribute('item_id')).filter(Boolean);
     if (itemIds.length !== rows.length) return false;
 
-    if (!(await selectRows(rows))) return batchFailure('10 条用例未全部保持勾选');
+    // 直连 TAPD 批量执行接口。
+    if (!(await batchExecuteByApi(itemIds))) return batchFailure('接口未确认执行成功');
 
-    // 直连 TAPD 批量执行，不再操作行菜单。
-    if (!(await invokeBatchQuickExecute(itemIds))) return false;
-
-    // TAPD 成功后会用 reload_tcase_row 重绘这些行，勾选状态随之清除；等 DOM 变为“通过”。
-    const passed = await waitForRowsPassed(itemIds, 12000);
-    if (!passed) {
-      // 接口已发起但 DOM 未变化时，取消勾选避免残留。
-      clearRowSelection(rows);
+    // 接口成功后可主动重绘这些行，让页面状态与接口一致。
+    try {
+      const Tcase = window.TFL?.TestPlanDetail?.Tcase;
+      if (Tcase && typeof Tcase.reload_tcase_row === 'function') {
+        Tcase.reload_tcase_row(itemIds.join(','));
+      }
+    } catch (error) {
+      console.warn('[TAPD batch execution] 刷新行失败', error);
     }
+
+    // 等 DOM 变为“通过”。
+    const passed = await waitForRowsPassed(itemIds, 12000);
+    if (!passed) return batchFailure('接口已成功但页面状态未更新');
     return passed;
   }
 
