@@ -11,11 +11,7 @@
  1. 在 Chrome 中安装 Tampermonkey 扩展，新建脚本。
  2. 粘贴 tapd_pending_to_pass.user.js 的全部内容并保存。
  3. 打开任意 TAPD 测试计划详情页（/sparrow/test_plan/detail/*）；右下角会显示待处理数量。
- 4. 点击“逐条执行用例”逐条执行，或点击“批量执行用例”按每批 10 条执行。
-
- ## 本地测试网站
-
- 本地模拟测试站已拆分为独立项目：[tapd-local-test-site](../tapd-local-test-site/)。测试站不会连接或修改真实 TAPD 数据。
+4. 点击“逐条执行用例”逐条执行，或点击“批量执行用例”按每批 10 条执行。
  
  ## 技术要点
  
@@ -23,7 +19,7 @@
  - 展开折叠列表：自动找到用例行所属的分类目录行，依次展开后再执行修改。
  - 逐条执行：每条先点击状态单元格，等待选项框出现，选中"通过"，再用 item_id 重新查询 DOM 确认状态变更后才继续下一条。
 - 批量执行：每批勾选最多 10 条非通过用例，直接调用 TAPD 自身的批量执行接口（TFL.TestPlanDetail.Tcase.batch_quick_execute → execute_result/batch_execute/0/），不再操作行菜单，避免 TAPD 菜单依赖真实鼠标渲染导致点击无效的问题；每批等待结果变为"通过"后再处理下一批。
- - 兼容性：@match 覆盖 https://tapd.tencent.com/*/sparrow/test_plan/detail/*、https://tapd.woa.com/*/sparrow/test_plan/view/* 与 http://localhost:8080/*，不限定具体项目 ID 或迭代。
+- 兼容性：@match 覆盖 https://tapd.tencent.com/*/sparrow/test_plan/detail/* 与 https://tapd.woa.com/*/sparrow/test_plan/view/*，不限定具体项目 ID 或迭代。
  - 超时处理：每条等待最多 3 秒，超时的用例在最终提示中列出。
  - 保持活跃：执行期间播放人耳几乎听不到的循环音（阻止浏览器高强度节流）并请求屏幕唤醒锁（阻止系统休眠）；暂停或完成后自动释放。
 - 失败重试：有失败用例时 3 秒后自动重试（可点击取消）；连续 3 次仍失败则自动刷新页面并继续，刷新后仍失败则停止。状态通过 sessionStorage 跨刷新保留。

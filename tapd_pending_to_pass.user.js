@@ -5,7 +5,6 @@
 // @description  支持逐条执行和每批十条通过的测试计划用例（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
-// @match        http://localhost:8080/*
 // @downloadURL  https://raw.githubusercontent.com/keli2311/-Tapd-/main/tapd_pending_to_pass.user.js
 // @updateURL    https://raw.githubusercontent.com/keli2311/-Tapd-/main/tapd_pending_to_pass.user.js
 // @run-at       document-idle
