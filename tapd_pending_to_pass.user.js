@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.3.0
+// @version      2.3.2
 // @description  支持逐条执行和每批十条通过的测试计划用例（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
@@ -23,6 +23,13 @@
   const BATCH_SIZE = 10;
   const RETRY_STATE_KEY = 'tapdExecRetryState';
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // 更新进度条：已执行/总数
+  function setProgress(done, total) {
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    progressFill.style.width = `${pct}%`;
+    progressText.textContent = `已执行 ${done}/${total} 条`;
+  }
 
   function loadRetryState() {
     try {
@@ -287,6 +294,7 @@
         failed.push(...titles);
         break;
       }
+      setProgress(succeeded, initialRows.length);
       await sleep(BETWEEN_CASES_MS);
     }
 
@@ -384,6 +392,7 @@
       if (stopRequested) {
         clearRetryState();
         setMessage(`已停止：已完成 ${index}/${rows.length} 条（成功 ${succeeded} 条）。`);
+        setProgress(index, rows.length);
         resetButton();
         return;
       }
@@ -392,6 +401,7 @@
       setMessage(`正在处理 ${index + 1}/${rows.length}：${title}`);
       if (await setResultToPass(row)) succeeded += 1;
       else failed.push(title);
+      setProgress(index + 1, rows.length);
       await sleep(BETWEEN_CASES_MS);
     }
 
@@ -514,8 +524,20 @@
   const message = document.createElement('div');
   message.style.cssText = 'margin-top:8px;color:#666;word-break:break-word;';
   const setMessage = (text) => { message.textContent = text; };
-  setMessage(`已检测到 ${targetRows().length} 条非通过用例。`);
-  panel.append(button, batchButton, message);
+  const progressWrap = document.createElement('div');
+  progressWrap.style.cssText = 'margin-top:8px;';
+  const progressBar = document.createElement('div');
+  progressBar.style.cssText = 'height:8px;background:#eee;border-radius:4px;overflow:hidden;';
+  const progressFill = document.createElement('div');
+  progressFill.style.cssText = 'width:0%;height:100%;background:#1677ff;border-radius:4px;transition:width .3s;';
+  const progressText = document.createElement('div');
+  progressText.style.cssText = 'margin-top:2px;color:#666;font-size:12px;';
+  progressBar.appendChild(progressFill);
+  progressWrap.append(progressBar, progressText);
+  const pendingCount = targetRows().length;
+  setMessage(`已检测到 ${pendingCount} 条非通过用例。`);
+  setProgress(0, pendingCount);
+  panel.append(button, batchButton, message, progressWrap);
   document.body.appendChild(panel);
 
   // 刷新页面后自动恢复执行：等待用例列表出现，然后直接开始。
