@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.3.2
+// @version      2.3.4
 // @description  支持逐条执行和每批十条通过的测试计划用例（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
@@ -268,11 +268,13 @@
   async function executeBatch() {
     const initialRows = targetRows();
     if (initialRows.length === 0) {
+      clearRetryState();
       setMessage('没有检测到非通过用例。');
       resetButton();
       return;
     }
 
+    const retryState = loadRetryState();
     stopRequested = false;
     button.disabled = true;
     batchButton.textContent = '暂停执行';
@@ -282,8 +284,13 @@
 
     let succeeded = 0;
     const failed = [];
+    const skippedIds = new Set();
+    const skippedRows = new Set();
+    setProgress(0, initialRows.length);
     while (!stopRequested) {
-      const rows = targetRows().slice(0, BATCH_SIZE);
+      const rows = targetRows()
+        .filter((row) => !skippedIds.has(row.getAttribute('item_id')) && !skippedRows.has(row))
+        .slice(0, BATCH_SIZE);
       if (rows.length === 0) break;
 
       const titles = rows.map((row) => row.querySelector('td[field="name"]')?.textContent?.trim() || row.getAttribute('item_id'));
@@ -292,19 +299,48 @@
         succeeded += rows.length;
       } else {
         failed.push(...titles);
-        break;
+        rows.forEach((row) => {
+          const itemId = row.getAttribute('item_id');
+          if (itemId) skippedIds.add(itemId);
+          else skippedRows.add(row);
+        });
+        setMessage(`本批次 ${titles.length} 条执行失败，已跳过，继续处理剩余用例。`);
       }
-      setProgress(succeeded, initialRows.length);
+      setProgress(succeeded + failed.length, initialRows.length);
       await sleep(BETWEEN_CASES_MS);
     }
 
     stopKeepAlive();
     releaseWakeLock();
     if (stopRequested) {
+      clearRetryState();
       resetButton();
       setMessage(`已停止：成功 ${succeeded} 条，失败 ${failed.length} 条。`);
       return;
     }
+
+    if (failed.length > 0) {
+      if (retryState?.afterRefresh) {
+        clearRetryState();
+        resetButton();
+        setMessage(`刷新后执行仍失败，已停止。成功 ${succeeded} 条，失败 ${failed.length} 条。`);
+        return;
+      }
+
+      const attempt = retryState?.attempt || 1;
+      if (attempt < MAX_ATTEMPTS) {
+        saveRetryState({ attempt: attempt + 1, afterRefresh: false, mode: 'batch' });
+        scheduleRetry('batch');
+        setMessage(`本次 ${failed.length} 条失败，${RETRY_DELAY_MS / 1000} 秒后自动重试（第 ${attempt + 1}/${MAX_ATTEMPTS} 次）。`);
+      } else {
+        saveRetryState({ attempt: 1, afterRefresh: true, mode: 'batch' });
+        setMessage('连续 3 次执行仍有失败，正在刷新页面后重试...');
+        location.reload();
+      }
+      return;
+    }
+
+    clearRetryState();
     resetButton();
     setMessage(`批量执行完成：成功 ${succeeded} 条，失败 ${failed.length} 条。`);
   }
@@ -425,11 +461,11 @@
 
     const attempt = retryState?.attempt || 1;
     if (attempt < MAX_ATTEMPTS) {
-      saveRetryState({ attempt: attempt + 1, afterRefresh: false });
+      saveRetryState({ attempt: attempt + 1, afterRefresh: false, mode: 'single' });
       scheduleRetry();
       setMessage(`本次 ${failed.length} 条失败，${RETRY_DELAY_MS / 1000} 秒后自动重试（第 ${attempt + 1}/${MAX_ATTEMPTS} 次）。`);
     } else {
-      saveRetryState({ attempt: 1, afterRefresh: true });
+      saveRetryState({ attempt: 1, afterRefresh: true, mode: 'single' });
       setMessage('连续 3 次执行仍有失败，正在刷新页面后重试...');
       location.reload();
     }
@@ -438,23 +474,25 @@
   let retryTimer = null;
   let retryCountdown = RETRY_DELAY_MS / 1000;
 
-  function scheduleRetry() {
+  function scheduleRetry(mode = 'single') {
     stopRequested = false;
     retryCountdown = RETRY_DELAY_MS / 1000;
-    button.textContent = `${retryCountdown}s 后自动重试`;
-    button.style.background = '#d32f2f';
+    const retryButton = mode === 'batch' ? batchButton : button;
+    retryButton.textContent = `${retryCountdown}s 后自动重试`;
+    retryButton.style.background = '#d32f2f';
     retryTimer = setInterval(() => {
       retryCountdown -= 1;
       if (retryCountdown <= 0) {
         clearInterval(retryTimer);
         retryTimer = null;
         isRunning = true;
-        execute().finally(() => {
+        const run = mode === 'batch' ? executeBatch : execute;
+        run().finally(() => {
           isRunning = false;
         });
         return;
       }
-      button.textContent = `${retryCountdown}s 后自动重试`;
+      retryButton.textContent = `${retryCountdown}s 后自动重试`;
     }, 1000);
   }
 
@@ -512,7 +550,12 @@
   batchButton.textContent = '批量执行用例';
   batchButton.style.cssText = 'width:100%;margin-top:6px;padding:8px;background:#1677ff;color:#fff;border:0;border-radius:4px;cursor:pointer;';
   batchButton.addEventListener('click', () => {
-    if (autoResumeRunning || isRunning) {
+    if (autoResumeRunning) return;
+    if (retryTimer) {
+      cancelRetry();
+      return;
+    }
+    if (isRunning) {
       stopRequested = true;
       return;
     }
@@ -554,7 +597,8 @@
         return;
       }
       isRunning = true;
-      await execute();
+      if (initialRetryState.mode === 'batch') await executeBatch();
+      else await execute();
       isRunning = false;
     })();
   }
