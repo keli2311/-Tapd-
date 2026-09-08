@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TAPD 测试计划：非通过用例批量改为通过
 // @namespace    local.tapd.automation
-// @version      2.3.4
+// @version      2.3.5
 // @description  支持逐条执行和每批十条通过的测试计划用例（适用于所有测试计划详情页）。
 // @match        https://tapd.tencent.com/*/sparrow/test_plan/detail/*
 // @match        https://tapd.woa.com/*/sparrow/test_plan/view/*
@@ -78,6 +78,16 @@
     if (PASS_TEXT_REGEX.test(span.textContent || '')) return true;
     if (span.closest('.status_pass') || span.classList.contains('status_pass')) return true;
     return false;
+  }
+
+  // 获取某行用例名称：优先兼容旧版 td[field="name"]；
+  // TAPD 新页面已去掉名称单元格的 field 属性，改用优先级列的前一个单元格定位名称列。
+  function rowTitle(row) {
+    const nameCell =
+      row.querySelector('td[field="name"]') ||
+      row.querySelector('td[field="priority"]')?.previousElementSibling;
+    const title = nameCell ? nameCell.textContent.trim() : '';
+    return title || row.getAttribute('item_id') || '';
   }
 
   // 检查某行当前是否为“通过”状态（用 item_id 重新查 DOM）
@@ -293,7 +303,7 @@
         .slice(0, BATCH_SIZE);
       if (rows.length === 0) break;
 
-      const titles = rows.map((row) => row.querySelector('td[field="name"]')?.textContent?.trim() || row.getAttribute('item_id'));
+      const titles = rows.map((row) => rowTitle(row));
       setMessage(`正在批量处理 ${titles.length} 条：${titles[0]}${titles.length > 1 ? ` 等 ${titles.length} 条` : ''}`);
       if (await executeBatchRows(rows)) {
         succeeded += rows.length;
@@ -433,7 +443,7 @@
         return;
       }
       const row = rows[index];
-      const title = row.querySelector('td[field="name"]')?.textContent?.trim() || row.getAttribute('item_id');
+      const title = rowTitle(row);
       setMessage(`正在处理 ${index + 1}/${rows.length}：${title}`);
       if (await setResultToPass(row)) succeeded += 1;
       else failed.push(title);
